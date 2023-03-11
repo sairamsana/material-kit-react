@@ -1,8 +1,9 @@
 import { Helmet } from 'react-helmet-async';
 import { filter } from 'lodash';
 import { sentenceCase } from 'change-case';
-import { useEffect, useState } from 'react';
-import { observer } from 'mobx-react-lite';
+import { useState,useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
 
 // @mui
 import {
@@ -23,35 +24,32 @@ import {
   IconButton,
   TableContainer,
   TablePagination,
-TextField,
-Dialog,
-DialogActions,
-DialogContent,
-DialogContentText,
-DialogTitle
 } from '@mui/material';
 // components
-import Label from '../components/label';
-import Iconify from '../components/iconify';
-import Scrollbar from '../components/scrollbar';
+import Label from '../../components/label';
+import Iconify from '../../components/iconify';
+import Scrollbar from '../../components/scrollbar';
 // sections
-import { UserListHead, UserListToolbar } from '../sections/@dashboard/user';
+import{ updateBillID,getBillsByUserid} from '../../store/BillSlice'
+import { UserListHead, UserListToolbar } from '../../sections/@dashboard/user';
 // mock
-import { utilStore } from '../store';
+import USERLIST from '../../_mock/user';
+
+
 // ----------------------------------------------------------------------
 
 const TABLE_HEAD = [
   { id: 'name', label: 'Name', alignRight: false },
-  // { id: 'isVerified', label: 'Verified', alignRight: false },
-  // { id: 'status', label: 'Status', alignRight: false },
+  { id: 'Category', label: 'Category', alignRight: false },
+  { id: 'Store', label: 'Store', alignRight: false },
+  { id: 'Amount', label: 'Total Amount', alignRight: false },
+  { id: 'status', label: 'Status', alignRight: false },
   { id: '' },
 ];
 
 // ----------------------------------------------------------------------
 
 function descendingComparator(a, b, orderBy) {
-  
-
   if (b[orderBy] < a[orderBy]) {
     return -1;
   }
@@ -80,9 +78,16 @@ function applySortFilter(array, comparator, query) {
   return stabilizedThis.map((el) => el[0]);
 }
 
-function UserPage() {
-  const DEPTLIST = utilStore.dept;
+export default function BillsList() {
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
+
+  const userStore = useSelector((state) => state.user);
+  const billStore = useSelector((state) => state.bill);
+  const billsList = billStore.billList
+
   const [open, setOpen] = useState(null);
+  const [updateBill, setUpdateBill] = useState({});
 
   const [page, setPage] = useState(0);
 
@@ -96,11 +101,14 @@ function UserPage() {
 
   const [rowsPerPage, setRowsPerPage] = useState(5);
 
-  const handleOpenMenu = (event) => {
+  const handleOpenMenu = (event, row) => {
+    // console.log(row)
+    setUpdateBill(row)
     setOpen(event.currentTarget);
   };
 
   const handleCloseMenu = () => {
+    setUpdateBill({})
     setOpen(null);
   };
 
@@ -110,27 +118,45 @@ function UserPage() {
     setOrderBy(property);
   };
 
+  const handleMenuItemClick = (event) => {
+    // console.log(event)
+    // console.log(updateBill)
+    dispatch(updateBillID(updateBill.billid))
+    navigate(`/dashboard/updatebill?id=${updateBill.billid}`, { replace: true });
+  };
+
+  useEffect(()=>{
+    dispatch(getBillsByUserid(userStore.useruuid))
+  },[])
+
+
   const handleSelectAllClick = (event) => {
     if (event.target.checked) {
-      const newSelecteds = DEPTLIST.map((n) => n.name);
+      const newSelecteds = billsList.map((n) => n.name);
       setSelected(newSelecteds);
       return;
     }
     setSelected([]);
   };
 
+  const handleClick = (event, name) => {
+    const selectedIndex = selected.indexOf(name);
+    let newSelected = [];
+    if (selectedIndex === -1) {
+      newSelected = newSelected.concat(selected, name);
+    } else if (selectedIndex === 0) {
+      newSelected = newSelected.concat(selected.slice(1));
+    } else if (selectedIndex === selected.length - 1) {
+      newSelected = newSelected.concat(selected.slice(0, -1));
+    } else if (selectedIndex > 0) {
+      newSelected = newSelected.concat(selected.slice(0, selectedIndex), selected.slice(selectedIndex + 1));
+    }
+    setSelected(newSelected);
+  };
+
   const handleChangePage = (event, newPage) => {
     setPage(newPage);
   };
-
-  useEffect(() => {
-    utilStore.getDeptList()
-  
-    // return () => {
-      
-    // }
-  }, [])
-  
 
   const handleChangeRowsPerPage = (event) => {
     setPage(0);
@@ -142,25 +168,46 @@ function UserPage() {
     setFilterName(event.target.value);
   };
 
-  const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - DEPTLIST.length) : 0;
+  const handleNewBillClick = () => {
+    navigate('/dashboard/newuser', { replace: true });
+  };
 
-  const filteredUsers = applySortFilter(DEPTLIST, getComparator(order, orderBy), filterName);
+  function statusColorPick(val) {
+    // console.log(val)
+    if (val === 'Pending') {
+      return 'info'
+    }
+    if (val === 'Review') {
+      return 'warning'
+    }
+    if (val === 'Approved') {
+      return 'success'
+    }
+    if (val === 'Reject') {
+      return 'error'
+    }
+    return 'success'
+  }
+
+  const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - billsList.length) : 0;
+
+  const filteredUsers = applySortFilter(billsList, getComparator(order, orderBy), filterName);
 
   const isNotFound = !filteredUsers.length && !!filterName;
 
   return (
     <>
       <Helmet>
-        <title> User | Minimal UI </title>
+        <title> Bill | APAutomation </title>
       </Helmet>
 
       <Container>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={5}>
           <Typography variant="h4" gutterBottom>
-            Department
+            Bills
           </Typography>
-          <Button variant="contained" startIcon={<Iconify icon="eva:plus-fill" />}>
-            New
+          <Button variant="contained" onClick={handleNewBillClick} startIcon={<Iconify icon="eva:plus-fill" />}>
+            New Bill
           </Button>
         </Stack>
 
@@ -168,28 +215,38 @@ function UserPage() {
           <UserListToolbar numSelected={selected.length} filterName={filterName} onFilterName={handleFilterByName} />
 
           <Scrollbar>
-            <TableContainer sx={{ minWidth: 200 }}>
+            <TableContainer sx={{ minWidth: 800 }}>
               <Table>
                 <UserListHead
                   order={order}
                   orderBy={orderBy}
                   headLabel={TABLE_HEAD}
-                  rowCount={DEPTLIST.length}
+                  rowCount={billsList.length}
                   numSelected={selected.length}
                   onRequestSort={handleRequestSort}
                   onSelectAllClick={handleSelectAllClick}
                 />
                 <TableBody>
                   {filteredUsers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((row) => {
-                    const { deptid, name, role, status, company, avatarUrl, isVerified } = row;
-
+                    // const { id, name, role, status, company, avatarUrl, isVerified } = row;
+                    const { billid, name, deptname, retail  , amount, tax, approvals,billstatus } = row;
+                    let {status} = ''
+                    for (let i = 0; i < approvals.length; i++) {
+                      const e = approvals[i];
+                      status = e.status
+                    }
+                    const totalAmount = (tax+amount).toLocaleString('en-US', {
+                      style: 'currency',
+                      currency: 'CAD',
+                    })
+                    const selectedUser = selected.indexOf(name) !== -1;
                     return (
-                      <TableRow hover key={deptid}>
+                      <TableRow hover key={billid} tabIndex={-1}  selected={selectedUser}>
                         {/* <TableCell padding="checkbox">
                           <Checkbox checked={selectedUser} onChange={(event) => handleClick(event, name)} />
                         </TableCell> */}
 
-                        <TableCell component="th" scope="row" padding="2">
+                        <TableCell component="th" scope="row" >
                           <Stack direction="row" alignItems="center" spacing={2}>
                             {/* <Avatar alt={name} src={avatarUrl} /> */}
                             <Typography variant="subtitle2" noWrap>
@@ -198,14 +255,18 @@ function UserPage() {
                           </Stack>
                         </TableCell>
 
-                        {/* <TableCell align="left">{isVerified ? 'Yes' : 'No'}</TableCell>
+                        <TableCell align="left">{deptname}</TableCell>
+
+                        <TableCell align="left">{retail}</TableCell>
+
+                        <TableCell align="left">{totalAmount}</TableCell>
 
                         <TableCell align="left">
-                          <Label color={(status === 'banned' && 'error') || 'success'}>{sentenceCase(status)}</Label>
-                        </TableCell> */}
+                          <Label color={statusColorPick(billstatus)}>{sentenceCase(billstatus)}</Label>
+                        </TableCell>
 
                         <TableCell align="right">
-                          <IconButton size="large" color="inherit" onClick={handleOpenMenu}>
+                          <IconButton size="large" color="inherit" onClick={(event) => handleOpenMenu(event, row)}>
                             <Iconify icon={'eva:more-vertical-fill'} />
                           </IconButton>
                         </TableCell>
@@ -231,7 +292,6 @@ function UserPage() {
                           <Typography variant="h6" paragraph>
                             Not found
                           </Typography>
-
                           <Typography variant="body2">
                             No results found for &nbsp;
                             <strong>&quot;{filterName}&quot;</strong>.
@@ -249,7 +309,7 @@ function UserPage() {
           <TablePagination
             rowsPerPageOptions={[5, 10, 25]}
             component="div"
-            count={DEPTLIST.length}
+            count={billsList.length}
             rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={handleChangePage}
@@ -276,41 +336,16 @@ function UserPage() {
           },
         }}
       >
-        <MenuItem>
+        <MenuItem onClick={(event) => handleMenuItemClick(event)}>
           <Iconify icon={'eva:edit-fill'} sx={{ mr: 2 }} />
-          Edit
+          View
         </MenuItem>
 
-        <MenuItem sx={{ color: 'error.main' }}>
+        {/* <MenuItem sx={{ color: 'error.main' }}>
           <Iconify icon={'eva:trash-2-outline'} sx={{ mr: 2 }} />
           Delete
-        </MenuItem>
+        </MenuItem> */}
       </Popover>
-
-      <Dialog open={open} onClose={handleClose}>
-        <DialogTitle>Subscribe</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            To subscribe to this website, please enter your email address here. We
-            will send updates occasionally.
-          </DialogContentText>
-          <TextField
-            autoFocus
-            margin="dense"
-            id="name"
-            label="Email Address"
-            type="email"
-            fullWidth
-            variant="standard"
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleClose}>Cancel</Button>
-          <Button onClick={handleClose}>Subscribe</Button>
-        </DialogActions>
-      </Dialog>
     </>
   );
 }
-
-export default observer(UserPage);
